@@ -2897,7 +2897,8 @@ static int	synaptics_input_init(struct synaptics_ts_data *ts)
 		TPD_ERR("snps_ts_probe: Failed to allocate input device\n");
 		return ret;
 	}
-	ts->input_dev->name = TPD_DEVICE;
+
+	ts->input_dev->name = "synaptics";
 	ts->input_dev->dev.parent = &ts->client->dev;
 	set_bit(EV_SYN, ts->input_dev->evbit);
 	set_bit(EV_ABS, ts->input_dev->evbit);
