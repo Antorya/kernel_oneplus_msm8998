@@ -171,6 +171,14 @@ struct test_header {
 #define KEY_GESTURE_SWIPE_UP        KEY_F8
 #endif
 
+// Button key mask
+#define BUTTON_LEFT     (0x1 << 1)
+#define BUTTON_RIGHT    (0x1 << 0)
+
+// Button key codes
+#define KEY_BUTTON_LEFT     KEY_BACK
+#define KEY_BUTTON_RIGHT    KEY_APPSELECT
+
 /*********************for Debug LOG switch*******************/
 #define TPD_ERR(a, arg...)  pr_err(TPD_DEVICE ": " a, ##arg)
 #define TPDTM_DMESG(a, arg...)  printk(TPD_DEVICE ": " a, ##arg)
@@ -210,16 +218,11 @@ static void synaptics_tpedge_limitfunc(void);
 #ifdef SUPPORT_TP_SLEEP_MODE
 static int sleep_enable;
 #endif
-#ifdef SUPPORT_TP_TOUCHKEY
-static int key_switch;
-static bool key_back_disable, key_appselect_disable;
-#endif
 static struct synaptics_ts_data *ts_g;
 static struct workqueue_struct *synaptics_wq;
 static struct workqueue_struct *synaptics_report;
 static struct workqueue_struct *get_base_report;
 static struct proc_dir_entry *prEntry_tp;
-
 
 #ifdef SUPPORT_GESTURE
 static uint32_t clockwise;
@@ -491,6 +494,10 @@ struct synaptics_ts_data {
 	int is_suspended;
 	atomic_t is_stop;
 	spinlock_t lock;
+
+	/******button keys******/
+	bool key_swap;
+	bool key_disable;
 
 	/********test*******/
 	int i2c_device_test;
@@ -1561,14 +1568,7 @@ void int_touch(void)
 INT_TOUCH_END:
 	mutex_unlock(&ts->mutexreport);
 }
-static char log_count;
-#ifdef SUPPORT_TP_TOUCHKEY
-#define OEM_KEY_BACK (key_switch ? KEY_APPSELECT : KEY_BACK)
-#define OEM_KEY_APPSELECT (key_switch ? KEY_BACK : KEY_APPSELECT)
-#else
-#define OEM_KEY_BACK KEY_BACK
-#define OEM_KEY_APPSELECT KEY_APPSELECT
-#endif
+
 static void int_key_report_s3508(struct synaptics_ts_data *ts)
 {
 	int ret = 0;
@@ -1578,6 +1578,9 @@ static void int_key_report_s3508(struct synaptics_ts_data *ts)
 	if (ts->is_suspended == 1)
 		return;
 
+	int keycode_left;
+	int keycode_right;
+
 	ret = synaptics_rmi4_i2c_write_byte(ts->client, 0xff, 0x02);
 	if (ret < 0) {
 		TPD_ERR("%s: line[%d]Failed to change page!!\n",
@@ -1585,30 +1588,35 @@ static void int_key_report_s3508(struct synaptics_ts_data *ts)
 		return;
 	}
 	button_key = synaptics_rmi4_i2c_read_byte(ts->client, F1A_0D_DATA00);
-	if ((++log_count % 4) == 1)
-		TPD_ERR("touch_key[0x%x],touchkey_state[0x%x]\n",
-		button_key, ts->pre_btn_state);
-	if ((button_key & 0x01) && !(ts->pre_btn_state & 0x01)
-	&& !key_back_disable) {
-		input_report_key(ts->input_dev, OEM_KEY_BACK, 1);
-		input_sync(ts->input_dev);
-	} else if (!(button_key & 0x01) && (ts->pre_btn_state & 0x01)
-	&& !key_back_disable){
-		input_report_key(ts->input_dev, OEM_KEY_BACK, 0);
-		input_sync(ts->input_dev);
+
+	if (ts->key_swap) {
+		keycode_left = KEY_BUTTON_RIGHT;
+		keycode_right = KEY_BUTTON_LEFT;
+	} else {
+		keycode_left = KEY_BUTTON_LEFT;
+		keycode_right = KEY_BUTTON_RIGHT;
 	}
 
-	if ((button_key & 0x02) && !(ts->pre_btn_state & 0x02)
-	&& !key_appselect_disable) {
-		input_report_key(ts->input_dev, OEM_KEY_APPSELECT, 1);
-		input_sync(ts->input_dev);
-	} else if (!(button_key & 0x02) && (ts->pre_btn_state & 0x02)
-	&& !key_appselect_disable) {
-		input_report_key(ts->input_dev, OEM_KEY_APPSELECT, 0);
-		input_sync(ts->input_dev);
+	if (!ts->key_disable) {
+		if ((button_key & BUTTON_LEFT) && !(ts->pre_btn_state & BUTTON_LEFT)) {
+			input_report_key(ts->input_dev, keycode_left, 1);
+			input_sync(ts->input_dev);
+		} else if (!(button_key & BUTTON_LEFT) && (ts->pre_btn_state & BUTTON_LEFT)) {
+			input_report_key(ts->input_dev, keycode_left, 0);
+			input_sync(ts->input_dev);
+		}
+
+		if ((button_key & BUTTON_RIGHT) && !(ts->pre_btn_state & BUTTON_RIGHT)) {
+			input_report_key(ts->input_dev, keycode_right, 1);
+			input_sync(ts->input_dev);
+		} else if (!(button_key & BUTTON_RIGHT) && (ts->pre_btn_state & BUTTON_RIGHT)) {
+			input_report_key(ts->input_dev, keycode_right, 0);
+			input_sync(ts->input_dev);
+		}
 	}
 
-	ts->pre_btn_state = button_key & 0x07;
+	ts->pre_btn_state = button_key & (BUTTON_LEFT | BUTTON_RIGHT);
+
 	ret = synaptics_rmi4_i2c_write_byte(ts->client, 0xff, 0x00);
 	if (ret < 0) {
 		TPD_ERR("%s: line[%d]Failed to change page!!\n",
@@ -2929,9 +2937,9 @@ static int	synaptics_input_init(struct synaptics_ts_data *ts)
 	set_bit(KEY_GESTURE_SWIPE_LEFT, ts->input_dev->keybit);
 	set_bit(KEY_GESTURE_SWIPE_RIGHT, ts->input_dev->keybit);
 	set_bit(KEY_GESTURE_SWIPE_DOWN, ts->input_dev->keybit);
-	set_bit(KEY_APPSELECT, ts->input_dev->keybit);
-	set_bit(KEY_BACK, ts->input_dev->keybit);
 #endif
+	set_bit(KEY_BUTTON_LEFT, ts->input_dev->keybit);
+	set_bit(KEY_BUTTON_RIGHT, ts->input_dev->keybit);
 	/* For multi touch */
 	input_set_abs_params(ts->input_dev, ABS_MT_TOUCH_MAJOR, 0, 255, 0, 0);
 	input_set_abs_params(ts->input_dev, ABS_MT_TOUCH_MINOR, 0, 255, 0, 0);
@@ -3676,54 +3684,33 @@ static const struct file_operations proc_limit_enable = {
 };
 #endif
 #ifdef SUPPORT_TP_TOUCHKEY
-static ssize_t key_switch_read_func(struct file *file,
-char __user *user_buf, size_t count, loff_t *ppos)
+static ssize_t key_swap_read_func(struct file *file, char __user *user_buf, size_t count, loff_t *ppos)
 {
 	int ret = 0;
 	char page[PAGESIZE];
-	struct synaptics_ts_data *ts = ts_g;
 
-	if (!ts)
-		return ret;
-	TPD_ERR("%s left:%s right:%s\n", __func__,
-		    key_switch ? "key_back" : "key_appselect",
-		    key_switch ? "key_appselect" : "key_back");
-	ret = snprintf(page, 48, "key_switch left:%s right:%s\n",
-		    key_switch ? "key_back" : "key_appselect",
-		    key_switch ? "key_appselect" : "key_back");
-	ret = simple_read_from_buffer(user_buf,
-	count, ppos, page, strlen(page));
+	ret = sprintf(page, "%d\n", ts_g->key_swap);
+	ret = simple_read_from_buffer(user_buf, count, ppos, page, strlen(page));
 
 	return ret;
 }
 
-static ssize_t key_switch_write_func(struct file *file,
-const char __user *buffer, size_t count, loff_t *ppos)
+static ssize_t key_swap_write_func(struct file *file, const char __user *user_buf, size_t count, loff_t *ppos)
 {
-	char buf[4] = {0};
-	int ret;
-	struct synaptics_ts_data *ts = ts_g;
+	int ret, write_flag = 0;
+	char page[PAGESIZE] = {0};
 
-	if (!ts)
-		return count;
-	if (count > 2)
-		return count;
-	if (copy_from_user(buf, buffer, count)) {
-		TPD_ERR("%s copy error\n", __func__);
-		return count;
-	}
-	ret = kstrtoint(&buf[0], 10, &key_switch);
-	if (ret < 0)
-		return ret;
-	TPD_ERR("%s write [%d]\n", __func__, key_switch);
-	TPD_ERR("left:%s right:%s\n", key_switch ? "key_back":"key_appselect",
-		key_switch ? "key_appselect":"key_back");
+	ret = copy_from_user(page, user_buf, count);
+	ret = sscanf(page, "%d", &write_flag);
+
+	ts_g->key_swap = (write_flag != 0);
+
 	return count;
 }
 
-static const struct file_operations key_switch_proc_fops = {
-	.write = key_switch_write_func,
-	.read =  key_switch_read_func,
+static const struct file_operations key_swap_proc_fops = {
+	.write = key_swap_write_func,
+	.read =  key_swap_read_func,
 	.open = simple_open,
 	.owner = THIS_MODULE,
 };
@@ -3732,22 +3719,9 @@ char __user *user_buf, size_t count, loff_t *ppos)
 {
 	int ret = 0;
 	char page[PAGESIZE];
-	struct synaptics_ts_data *ts = ts_g;
 
-	if (!ts)
-		return ret;
-
-	TPD_ERR("%s key_back:%s key_appselect:%s\n", __func__,
-	key_back_disable ? "disable":"enable",
-	key_appselect_disable ? "disable":"enable");
-
-	ret = snprintf(page, 64,
-	"cmd:enable,disable\nkey_back:%s key_appselect:%s\n",
-	key_back_disable ? "disable":"enable",
-	key_appselect_disable ? "disable":"enable");
-
-	ret = simple_read_from_buffer(user_buf, count,
-	ppos, page, strlen(page));
+	ret = sprintf(page, "%d\n", ts_g->key_disable);
+	ret = simple_read_from_buffer(user_buf, count, ppos, page, strlen(page));
 
 	return ret;
 }
@@ -3755,29 +3729,13 @@ char __user *user_buf, size_t count, loff_t *ppos)
 static ssize_t key_disable_write_func(struct file *file,
 const char __user *buffer, size_t count, loff_t *ppos)
 {
-	char buf[PAGESIZE];
-	struct synaptics_ts_data *ts = ts_g;
+	int ret, write_flag = 0;
+	char page[PAGESIZE] = {0};
 
-	if (!ts)
-		return count;
-	if (count > sizeof(buf)) {
-		TPD_ERR("%s error\n", __func__);
-		return count;
-	}
+	ret = copy_from_user(page, user_buf, count);
+	ret = sscanf(page, "%d", &write_flag);
 
-	if (copy_from_user(buf, buffer, count)) {
-		TPD_ERR("%s copy error\n", __func__);
-		return count;
-	}
-	if (strnstr(buf, "disable", sizeof(buf)) != NULL) {
-		key_back_disable = true;
-		key_appselect_disable = true;
-	} else if (strnstr(buf, "enable", sizeof(buf)) != NULL) {
-		key_back_disable = false;
-		key_appselect_disable = false;
-	}
-	TPD_ERR("%s key_back:%d key_appselect:%d\n",
-	__func__, key_back_disable, key_appselect_disable);
+	ts_g->key_disable = (write_flag != 0);
 
 	return count;
 }
@@ -3906,11 +3864,10 @@ static int init_synaptics_proc(void)
 		TPD_ERR("Couldn't create touch_press\n");
 	}
 #ifdef SUPPORT_TP_TOUCHKEY
-	prEntry_tmp = proc_create("key_switch", 0664,
-	prEntry_tp, &key_switch_proc_fops);
+	prEntry_tmp = proc_create("key_swap", 0666, prEntry_tp, &key_swap_proc_fops);
 	if (prEntry_tmp == NULL) {
 		ret = -ENOMEM;
-		TPD_ERR("Couldn't create key_switch\n");
+		TPD_ERR("Couldn't create key_swap\n");
 	}
 
 	prEntry_tmp = proc_create("key_disable", 0664,
@@ -5053,13 +5010,17 @@ static int synaptics_ts_suspend(struct device *dev)
 	}
 	TPD_DEBUG("%s enter\n", __func__);
 
-	if (ts->pre_btn_state & 0x01) {/*if press key and suspend release key*/
-		ts->pre_btn_state &= 0x02;/*clear bit0*/
-		input_report_key(ts->input_dev, OEM_KEY_BACK, 0);
+	// release left key if pressed
+	if (ts->pre_btn_state & BUTTON_LEFT) {
+		ts->pre_btn_state &= ~BUTTON_LEFT;
+		input_report_key(ts->input_dev, ts->key_swap ? KEY_BUTTON_RIGHT : KEY_BUTTON_LEFT, 0);
 		input_sync(ts->input_dev);
-	} else if (ts->pre_btn_state & 0x02) {
-		ts->pre_btn_state &= 0x01;/*clear bit1*/
-		input_report_key(ts->input_dev, OEM_KEY_APPSELECT, 0);
+	}
+
+	// release left right if pressed
+	if (ts->pre_btn_state & BUTTON_RIGHT) {
+		ts->pre_btn_state &= ~BUTTON_RIGHT;
+		input_report_key(ts->input_dev, ts->key_swap ? KEY_BUTTON_LEFT : KEY_BUTTON_RIGHT, 0);
 		input_sync(ts->input_dev);
 	}
 	for (i = 0; i < ts->max_num; i++) {
