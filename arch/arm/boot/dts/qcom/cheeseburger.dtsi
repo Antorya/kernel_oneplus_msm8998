@@ -13,6 +13,8 @@
 
 #include "pxlw-iris-settings.dtsi"
 
+/delete-node/ &firmware;
+
 / {
 	reserved-memory {
 		ramoops_mem: ramoops_mem@ac000000 {
@@ -30,6 +32,23 @@
 		bootloader_log_mem: bootloader_log_mem@9fff7000 {
 			reg = <0 0x9FFF7000 0 0x00100000>;
 			label = "bootloader_log_mem";
+		};
+	};
+
+	firmware: firmware {
+		android {
+			compatible = "android,firmware";
+			fstab {
+				compatible = "android,fstab";
+				system {
+					compatible = "android,system";
+					dev = "/dev/block/platform/soc/1da4000.ufshc/by-name/system";
+					type = "ext4";
+					mnt_flags = "ro,barrier=1,discard";
+					fsmgr_flags = "wait";
+					status = "ok";
+				};
+			};
 		};
 	};
 };
