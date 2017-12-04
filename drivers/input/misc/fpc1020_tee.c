@@ -414,8 +414,7 @@ static ssize_t sensor_version_get(struct device* device,
 			     struct device_attribute* attribute,
 			     char* buffer)
 {
-	struct fpc1020_data* fpc1020 = dev_get_drvdata(device);
-	return scnprintf(buffer, PAGE_SIZE, "%i\n", fpc1020->sensor_version);
+	return scnprintf(buffer, PAGE_SIZE, "%i\n", fp_version);
 }
 
 static DEVICE_ATTR(sensor_version, S_IRUSR , sensor_version_get, NULL);
