@@ -1297,15 +1297,18 @@ static int ath10k_start_cac(struct ath10k *ar)
 
 	set_bit(ATH10K_CAC_RUNNING, &ar->dev_flags);
 
-	ret = ath10k_monitor_recalc(ar);
-	if (ret) {
-		ath10k_warn(ar, "failed to start monitor (cac): %d\n", ret);
-		clear_bit(ATH10K_CAC_RUNNING, &ar->dev_flags);
-		return ret;
-	}
+	if (!QCA_REV_WCN3990(ar)) {
+		ret = ath10k_monitor_recalc(ar);
+		if (ret) {
+			ath10k_warn(ar, "failed to start monitor (cac): %d\n",
+				    ret);
+			clear_bit(ATH10K_CAC_RUNNING, &ar->dev_flags);
+			return ret;
+		}
 
-	ath10k_dbg(ar, ATH10K_DBG_MAC, "mac cac start monitor vdev %d\n",
-		   ar->monitor_vdev_id);
+		ath10k_dbg(ar, ATH10K_DBG_MAC, "mac cac start monitor vdev %d\n",
+			   ar->monitor_vdev_id);
+	}
 
 	return 0;
 }
@@ -1319,7 +1322,8 @@ static int ath10k_stop_cac(struct ath10k *ar)
 		return 0;
 
 	clear_bit(ATH10K_CAC_RUNNING, &ar->dev_flags);
-	ath10k_monitor_stop(ar);
+	if (!QCA_REV_WCN3990(ar))
+		ath10k_monitor_stop(ar);
 
 	ath10k_dbg(ar, ATH10K_DBG_MAC, "mac cac finished\n");
 
@@ -1416,6 +1420,10 @@ static int ath10k_vdev_start_restart(struct ath10k_vif *arvif,
 	int ret = 0;
 
 	lockdep_assert_held(&ar->conf_mutex);
+
+	/* Clear arp and ns offload cache */
+	memset(&arvif->arp_offload, 0, sizeof(arvif->arp_offload));
+	memset(&arvif->ns_offload, 0, sizeof(arvif->ns_offload));
 
 	reinit_completion(&ar->vdev_setup_done);
 	reinit_completion(&ar->vdev_delete_done);
@@ -4537,13 +4545,6 @@ static int ath10k_start(struct ieee80211_hw *hw)
 		goto err_core_stop;
 	}
 
-	param = ar->wmi.pdev_param->idle_ps_config;
-	ret = ath10k_wmi_pdev_set_param(ar, param, 1);
-	if (ret) {
-		ath10k_warn(ar, "failed to enable idle_ps_config: %d\n", ret);
-		goto err_core_stop;
-	}
-
 	if (test_bit(WMI_SERVICE_ADAPTIVE_OCS, ar->wmi.svc_map)) {
 		ret = ath10k_wmi_adaptive_qcs(ar, true);
 		if (ret) {
@@ -7613,6 +7614,8 @@ static const struct ieee80211_ops ath10k_ops = {
 #ifdef CONFIG_PM
 	.suspend			= ath10k_wow_op_suspend,
 	.resume				= ath10k_wow_op_resume,
+	.set_wakeup			= ath10k_wow_op_set_wakeup,
+	.set_rekey_data			= ath10k_wow_op_set_rekey_data,
 #endif
 #ifdef CONFIG_MAC80211_DEBUGFS
 	.sta_add_debugfs		= ath10k_sta_add_debugfs,

@@ -363,12 +363,14 @@ extern struct ath10k_hw_ce_regs qcax_ce_regs;
 extern struct fw_flag wcn3990_fw_flags;
 
 struct ath10k_hw_values {
+	u32 pdev_suspend_option;
 	u32 rtc_state_val_on;
 	u8 ce_count;
 	u8 msi_assign_ce_max;
 	u8 num_target_ce_config_wlan;
 	u16 ce_desc_meta_data_mask;
 	u8 ce_desc_meta_data_lsb;
+	u8 default_listen_interval;
 };
 
 extern const struct ath10k_hw_values qca988x_values;

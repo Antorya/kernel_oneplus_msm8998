@@ -1307,6 +1307,9 @@ static int ath10k_core_fetch_firmware_files(struct ath10k *ar)
 		fw_file = &ar->normal_mode_fw.fw_file;
 		fw_file->wmi_op_version = ATH10K_FW_WMI_OP_VERSION_TLV;
 		fw_file->htt_op_version = ATH10K_FW_HTT_OP_VERSION_TLV;
+		__set_bit(ATH10K_FW_FEATURE_WOWLAN_SUPPORT,
+			  fw_file->fw_features);
+		__set_bit(WMI_SERVICE_WOW, ar->wmi.svc_map);
 		return 0;
 	}
 
@@ -2088,7 +2091,7 @@ void ath10k_core_stop(struct ath10k *ar)
 	/* try to suspend target */
 	if (ar->state != ATH10K_STATE_RESTARTING &&
 	    ar->state != ATH10K_STATE_UTF)
-		ath10k_wait_for_suspend(ar, WMI_PDEV_SUSPEND_AND_DISABLE_INTR);
+		ath10k_wait_for_suspend(ar, ar->hw_values->pdev_suspend_option);
 
 	ath10k_hif_stop(ar);
 	ath10k_htt_tx_free(&ar->htt);
