@@ -122,6 +122,8 @@ dtb-$(CONFIG_MSM_GVM_QUIN) += vplatform-lfv-msm8996-telematics.dtb \
 	vplatform-lfv-msm8996-ivi-la.dtb \
 	vplatform-lfv-msm8996-ivi-lv-mt.dtb
 
+# Disable to reduce kernel size
+ifeq (true,false)
 ifeq ($(CONFIG_BUILD_ARM64_DT_OVERLAY),y)
 dtbo-$(CONFIG_ARCH_MSM8998) += \
 	msm8998-cdp-overlay.dtbo \
@@ -179,6 +181,13 @@ dtb-$(CONFIG_ARCH_MSM8998) += msm8998-sim.dtb \
 	msm8998-v2.1-interposer-sdm660-mtp.dtb \
 	msm8998-v2.1-interposer-sdm660-qrd.dtb
 endif
+endif
+
+dtb-$(CONFIG_VENDOR_ONEPLUS) += \
+	cheeseburger-v2.1-backup.dtb \
+	cheeseburger-v2.1-dvt1.dtb \
+	cheeseburger-v2.1-pvt.dtb \
+	cheeseburger-v2.1-pvt1.dtb
 
 dtb-$(CONFIG_ARCH_MSMHAMSTER) += msmhamster-rumi.dtb
 
