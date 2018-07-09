@@ -305,6 +305,7 @@ struct synaptics_rmi4_data {
 	struct pinctrl_state *pinctrl_state_release;
 	char fw_name[SYNA_FW_NAME_MAX_LEN];
 	bool suspended;
+
 #if defined(CONFIG_SECURE_TOUCH)
 	atomic_t st_enabled;
 	atomic_t st_pending_irqs;
@@ -314,6 +315,7 @@ struct synaptics_rmi4_data {
 	struct clk *core_clk;
 	struct clk *iface_clk;
 #endif
+		ktime_t timestamp;
 };
 
 struct synaptics_dsx_bus_access {
