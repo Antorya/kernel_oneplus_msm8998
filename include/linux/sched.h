@@ -2143,8 +2143,12 @@ struct task_struct {
 	unsigned long	task_state_change;
 #endif
 	int pagefault_disabled;
-	/* CPU-bound kernel thread */
+/* CPU-bound kernel thread */
 	bool kthread_per_cpu;
+#ifdef CONFIG_ANDROID_SIMPLE_LMK
+	bool lmk_sigkill_sent;
+#endif
+
 /* CPU-specific state of this task */
 	struct thread_struct thread;
 /*
