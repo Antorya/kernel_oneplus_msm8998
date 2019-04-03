@@ -310,6 +310,7 @@ static int goldfish_fb_probe(struct platform_device *pdev)
 	fb->fb.var.transp.length = fb_config->transp_length;
 
 	framesize = width * height * 2 * bytes_per_pixel;
+
 	fb->fb.screen_base = (char __force __iomem *)dma_alloc_coherent(
 						&pdev->dev, framesize,
 						&fbpaddr, GFP_KERNEL);
