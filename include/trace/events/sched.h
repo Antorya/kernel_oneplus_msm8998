@@ -1734,6 +1734,48 @@ TRACE_EVENT(sched_boost_task,
 );
 
 /*
+ * Tracepoint for find_best_target
+ */
+TRACE_EVENT(sched_find_best_target,
+
+	TP_PROTO(struct task_struct *tsk, bool prefer_idle,
+		unsigned long min_util, int start_cpu,
+		int best_idle, int best_active, int target),
+
+	TP_ARGS(tsk, prefer_idle, min_util, start_cpu,
+		best_idle, best_active, target),
+
+	TP_STRUCT__entry(
+		__array( char,	comm,	TASK_COMM_LEN	)
+		__field( pid_t,	pid			)
+		__field( unsigned long,	min_util	)
+		__field( bool,	prefer_idle		)
+		__field( int,	start_cpu		)
+		__field( int,	best_idle		)
+		__field( int,	best_active		)
+		__field( int,	target			)
+	),
+
+	TP_fast_assign(
+		memcpy(__entry->comm, tsk->comm, TASK_COMM_LEN);
+		__entry->pid		= tsk->pid;
+		__entry->min_util	= min_util;
+		__entry->prefer_idle	= prefer_idle;
+		__entry->start_cpu 	= start_cpu;
+		__entry->best_idle	= best_idle;
+		__entry->best_active	= best_active;
+		__entry->target		= target;
+	),
+
+	TP_printk("pid=%d comm=%s prefer_idle=%d start_cpu=%d "
+		  "best_idle=%d best_active=%d target=%d",
+		__entry->pid, __entry->comm,
+		__entry->prefer_idle, __entry->start_cpu,
+		__entry->best_idle, __entry->best_active,
+		__entry->target)
+);
+
+/*
  * Tracepoint for accounting sched group energy
  */
 TRACE_EVENT(sched_energy_diff,
@@ -1931,7 +1973,7 @@ TRACE_EVENT(walt_update_history,
 		__field(	 int,	samples			)
 		__field(	 int,	evt			)
 		__field(	 u64,	demand			)
-		__field(unsigned int,	walt_avg		)
+		__field(	 u64,	walt_avg		)
 		__field(unsigned int,	pelt_avg		)
 		__array(	 u32,	hist, RAVG_HIST_SIZE_MAX)
 		__field(	 int,	cpu			)
@@ -1944,8 +1986,7 @@ TRACE_EVENT(walt_update_history,
 		__entry->samples        = samples;
 		__entry->evt            = evt;
 		__entry->demand         = p->ravg.demand;
-		__entry->walt_avg	= (__entry->demand << 10);
-		do_div(__entry->walt_avg, walt_ravg_window);
+		__entry->walt_avg = (__entry->demand << 10) / walt_ravg_window,
 		__entry->pelt_avg	= p->se.avg.util_avg;
 		memcpy(__entry->hist, p->ravg.sum_history,
 					RAVG_HIST_SIZE_MAX * sizeof(u32));
@@ -1953,7 +1994,7 @@ TRACE_EVENT(walt_update_history,
 	),
 
 	TP_printk("%d (%s): runtime %u samples %d event %d demand %llu"
-		" walt %u pelt %u (hist: %u %u %u %u %u) cpu %d",
+		" walt %llu pelt %u (hist: %u %u %u %u %u) cpu %d",
 		__entry->pid, __entry->comm,
 		__entry->runtime, __entry->samples, __entry->evt,
 		__entry->demand,
